@@ -24,12 +24,12 @@ Two bots in one image, one answer per tick:
   giddygiddyboy Go bot, MIT, see `cbot/LICENSE`). It runs as a child process
   (`HYBRID_PEER`) and is fed every line the server sends, so its state is
   current at all times.
-- automata's free-for-all detector always runs. It fires when one mech dies
-  that we did not kill (before 75 s), or after two signs of mechs hurting each
+- automata's free-for-all detector always runs. It fires when two mechs die
+  that we did not kill (before 75 s), or after three signs of mechs hurting each
   other. The house squad never does either. From then on the
   child's answers are sent instead, because it is the stronger bot in a
   free-for-all.
 
 Switches for testing: `HYBRID_FORCE=1` (relay from the first tick),
 `HYBRID_LEAD_S` (let the child play the opening), `FFA_SIG_N` / `FFA_DEATH_N`
-(detector thresholds, default 2 / 1).
+(detector thresholds, default 3 / 2).

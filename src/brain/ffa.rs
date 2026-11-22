@@ -24,7 +24,7 @@ pub(crate) struct Ffa {
 impl Ffa {
     pub fn new(seed: i64) -> Ffa {
         let env = |k: &str, d: f64| std::env::var(k).ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(d);
-        Ffa { seed, sig_n: env("FFA_SIG_N", 2.0) as u32, death_n: env("FFA_DEATH_N", 1.0) as i64, ..Default::default() }
+        Ffa { seed, sig_n: env("FFA_SIG_N", 3.0) as u32, death_n: env("FFA_DEATH_N", 2.0) as i64, ..Default::default() }
     }
 
     pub fn foreign_t(&self, id: i64) -> f64 {

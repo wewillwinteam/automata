@@ -207,6 +207,13 @@ pub struct Params {
     pub seek_hp: f64,
     /// search before farming NPCs and crates instead of after
     pub seek_first: f64,
+    /// approach a target that is looking away from behind it (rear hits deal x1.5, and a
+    /// mech only sees inside its 120 deg front wedge); 0 = off
+    pub flank_on: f64,
+    /// how far behind the target to aim for (m)
+    pub flank_back: f64,
+    /// within this distance of an unaware target, walk below the 5 m/s step-sound speed
+    pub flank_quiet_r: f64,
     /// after this many kills (squad play only), rest to full between fights
     pub rest_after_k: f64,
     /// the kill gate applies to the gated kill only, and opens ready_wait s after the previous kill
@@ -624,6 +631,9 @@ impl Default for Params {
             seek_until: 0.0,
             seek_hp: 0.8,
             seek_first: 0.0,
+            flank_on: 0.0,
+            flank_back: 45.0,
+            flank_quiet_r: 90.0,
             rest_after_k: 0.0,
             ready_once: 0.0,
             ready_wait: 30.0,

@@ -120,6 +120,8 @@ pub struct Brain {
     pub(crate) roof_first_t: f64,
     /// the engagement model picked a distance beyond the legacy one for the current target
     pub(crate) stand_off: bool,
+    /// sneaking up on an unaware target: move silently this tick
+    pub(crate) flank_quiet: bool,
     pub(crate) kills: u32,
     pub(crate) pk: laser::Peek,
     pub(crate) lz_tid: i64,
@@ -199,6 +201,7 @@ impl Brain {
             roof_step: None,
             roof_first_t: -1.0,
             stand_off: false,
+            flank_quiet: false,
             kills: 0,
             pk: laser::Peek::new(),
             lz_tid: -1,
@@ -259,6 +262,13 @@ impl Brain {
         if let Some((j, b)) = self.gear_jet(obs) {
             mv.jump = mv.jump || j;
             mv.boost = mv.boost || b;
+        }
+        if self.flank_quiet {
+            // below sound.step_speed (5 m/s) a mech makes no step sounds
+            let k = (4.6 / obs.me.stats.walk_speed.max(1.0)).min(1.0);
+            mv.dir = [mv.dir[0] * k, mv.dir[1] * k];
+            mv.boost = false;
+            mv.jump = false;
         }
         self.laser_post(obs, world, &mut fc, &mut mv);
         self.loot_action(obs, &mut act);

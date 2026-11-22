@@ -156,6 +156,7 @@ impl Brain {
         let pos = me.pos;
         let hpf = frac(me.hp, me.max_hp);
         self.stand_off = false;
+        self.flank_quiet = false;
         let zi = self.zone_info(obs, world, nav);
         self.sq_update(obs, nav);
         let muzzle = up(pos, me.stats.muzzle_height);
@@ -298,6 +299,10 @@ impl Brain {
             } else if hold {
                 // wait where we are while it closes in, back off once it is nearer than the preferred distance
                 Goal::Range { pos: tp, pref: pref.max(dist2(tp, pos)) }
+            } else if let Some(q) = self.flank_point(obs, world, tr, pos) {
+                // no shot yet and it is looking away: come in from behind it, silently when close
+                self.flank_quiet = dist2(tp, pos) < p.flank_quiet_r;
+                Goal::Nav { pos: q, arrive: 8.0 }
             } else {
                 Goal::Nav { pos: tp, arrive: (pref * 0.5).max(15.0) }
             };
@@ -517,6 +522,28 @@ impl Brain {
             offer(1e6, q, &mut best);
         }
         best.map(|b| b.1).filter(|q| self.in_play(obs, zi, *q, dist(*q, me)))
+    }
+
+    /// A point behind a target that is not facing us and has not hurt us lately, or None.
+    fn flank_point(&self, obs: &Obs, world: &World, tr: &Track, me: V3) -> Option<V3> {
+        let p = &self.p;
+        let t = obs.t;
+        if p.flank_on <= 0.0 || t - tr.last_dmg_t < 4.0 || tr.charging || t - tr.last_seen > 3.0 {
+            return None;
+        }
+        let tp = tr.pos_at(t);
+        let to_us = (me[1] - tp[1]).atan2(me[0] - tp[0]);
+        // its view wedge is 120 deg (60 deg each side of its aim); keep a margin
+        if adiff(tr.aim[0], to_us).abs() < 1.4 {
+            return None;
+        }
+        let back = tr.aim[0] + std::f64::consts::PI;
+        let r = p.flank_back.min(dist2(tp, me));
+        let q = ground(world, [tp[0] + back.cos() * r, tp[1] + back.sin() * r]);
+        if dist2(q, me) < 6.0 {
+            return None;
+        }
+        Some(q)
     }
 
     fn in_play(&self, obs: &Obs, zi: &ZoneInfo, q: V3, d: f64) -> bool {

@@ -402,7 +402,11 @@ impl Brain {
             if self.target == Tgt::Mech(tr.id) {
                 s += p.target_sticky;
                 s += self.finish_bonus(tr);
+                if self.ko_charging(obs) {
+                    s += 1000.0;
+                }
             }
+            s += self.ko_value(obs, tr);
             if self.ffa_end_rival(obs, tr) {
                 s += p.ffa_end_bonus;
             }

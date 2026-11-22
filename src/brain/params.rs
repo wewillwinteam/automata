@@ -220,6 +220,19 @@ pub struct Params {
     /// practice only: from this many kills on (each kill adds a hunter), stop shooting
     /// crates and drones for cubes, since gunfire carries 320 m; 0 = off
     pub farm_stop_k: f64,
+    /// practice only: rank targets by (their damage per second to us) / (seconds we need
+    /// to kill them), times ko_w (capped at ko_cap); 0 = off
+    pub ko_on: f64,
+    pub ko_w: f64,
+    pub ko_cap: f64,
+    /// practice only: with 2+ recent attackers, fight from the nearby spot that keeps the
+    /// target in sight and shows the least of us (rear exposure x1.5); 0 = off
+    pub wall_on: f64,
+    /// practice only: after a kill, collect its cubes, then move 60-100 m away out of
+    /// sight and heal before the next fight; 0 = off
+    pub pace_on: f64,
+    pub pace_hp: f64,
+    pub pace_max_s: f64,
     /// after this many kills (squad play only), rest to full between fights
     pub rest_after_k: f64,
     /// the kill gate applies to the gated kill only, and opens ready_wait s after the previous kill
@@ -642,6 +655,13 @@ impl Default for Params {
             flank_quiet_r: 90.0,
             quiet_travel: 0.0,
             farm_stop_k: 0.0,
+            ko_on: 0.0,
+            ko_w: 4.0,
+            ko_cap: 150.0,
+            wall_on: 0.0,
+            pace_on: 0.0,
+            pace_hp: 0.9,
+            pace_max_s: 25.0,
             rest_after_k: 0.0,
             ready_once: 0.0,
             ready_wait: 30.0,

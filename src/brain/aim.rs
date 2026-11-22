@@ -136,6 +136,10 @@ impl Brain {
                 s += 50.0;
             }
             s += self.finish_bonus(tr);
+            s += self.ko_value(obs, tr);
+            if self.target == Tgt::Mech(tr.id) && self.ko_charging(obs) {
+                s += 1000.0;
+            }
             let to_us = (me.pos[1] - tr.pos[1]).atan2(me.pos[0] - tr.pos[0]);
             let aligned = adiff(tr.aim[0], to_us).abs() < 0.5;
             let allow = (if self.econ.resting { attacker || d < 45.0 } else { self.mode != Mode::Retreat || attacker || (aligned && clear) || d < 60.0 }) && !self.hold_fire(obs, d, tr.hp);

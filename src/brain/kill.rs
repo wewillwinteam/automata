@@ -2,9 +2,47 @@ use super::aim::FireOut;
 use super::math::*;
 use super::memory::Track;
 use super::{Brain, Mode, Tgt};
+use super::duel::{self, Loadout};
 use crate::proto::{ActorKind, Obs, WeaponKind};
 
 impl Brain {
+    /// Kill-order value (practice): its damage per second to us divided by the seconds we
+    /// need to kill it. Killing the highest ratio first minimises the damage we take.
+    pub(crate) fn ko_value(&self, obs: &Obs, tr: &Track) -> f64 {
+        let p = &self.p;
+        if p.ko_on <= 0.0 || !self.squad_mode() || self.ffa.on || tr.kind != ActorKind::Mech {
+            return 0.0;
+        }
+        let me = &obs.me;
+        let t = obs.t;
+        let has = |k: WeaponKind| me.weapons.iter().flatten().any(|w| w.kind == k);
+        let us = Loadout { gun: has(WeaponKind::Gun), laser: has(WeaponKind::Laser), lightning: has(WeaponKind::Lightning) };
+        let them = Loadout { gun: tr.has(WeaponKind::Gun) || tr.weapons.is_empty(), laser: tr.has(WeaponKind::Laser), lightning: tr.has(WeaponKind::Lightning) };
+        let tp = tr.pos_at(t);
+        let d = dist(tp, me.pos).max(1.0);
+        let cubes = me.cubes.min(self.cfg.cubes.stat_cap).max(0.0);
+        let mut out = duel::outgoing(us, d) * (1.0 + self.cfg.cubes.damage_per_cube * cubes);
+        let to_us = (me.pos[1] - tp[1]).atan2(me.pos[0] - tp[0]);
+        if adiff(tr.aim[0], to_us).abs() > std::f64::consts::FRAC_PI_2 {
+            out *= 1.5; // our shots land in its back
+        }
+        if us.laser && tr.has(WeaponKind::Mortar) {
+            out *= 1.25; // laser cook-off on mortar carriers
+        }
+        if !(out > 1e-6) {
+            return 0.0;
+        }
+        let ttk = (tr.hp.max(1.0) / out).max(0.5);
+        let threat = duel::incoming(them, true, d) + if t - tr.last_dmg_t < 3.0 { 20.0 } else { 0.0 };
+        (p.ko_w * threat / ttk).min(p.ko_cap)
+    }
+
+    /// Keep the current target while a laser charge is more than half full.
+    pub(crate) fn ko_charging(&self, obs: &Obs) -> bool {
+        self.p.ko_on > 0.0
+            && obs.me.weapons.iter().flatten().any(|w| w.kind == WeaponKind::Laser && w.stats.charge > 0.0 && w.charge > 0.5 * w.stats.charge)
+    }
+
     pub(crate) fn finish_bonus(&self, tr: &Track) -> f64 {
         let f = frac(tr.hp, tr.max_hp);
         if f < self.p.finish_hp {

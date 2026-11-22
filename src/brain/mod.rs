@@ -140,6 +140,8 @@ pub struct Brain {
     pub(crate) edge_away: Option<V2>,
     /// peek and duck: the cover spot and when it was chosen
     pub(crate) duck: Option<(V3, f64)>,
+    /// roof retreat episode: start time (< 0 when none)
+    pub(crate) rr_t0: f64,
     pub(crate) kills: u32,
     pub(crate) pk: laser::Peek,
     pub(crate) lz_tid: i64,
@@ -162,7 +164,7 @@ impl Brain {
     pub fn with_params(hello: &proto::Hello, shared: Arc<Shared>, params: Params) -> Brain {
         let mut rng = Rng::new(hello.seed as u64 ^ ((hello.slot as u64) << 40) ^ (params.salt.max(0.0) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15));
         let side = if rng.f64() < 0.5 { -1.0 } else { 1.0 };
-        let roof = if params.roof_mode > 0.0 {
+        let roof = if params.roof_mode > 0.0 || params.rr_on > 0.0 {
             let (mn, ms) = (params.roof_min_nodes.max(1.0) as usize, params.roof_min_setback * 0.5);
             std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Arc::new(roof::RoofMap::build(&shared.world, &shared.nav, mn, ms, hello.config.mech.height)))).ok()
         } else {
@@ -230,6 +232,7 @@ impl Brain {
             edge_wob: (0.0, -1e9),
             edge_away: None,
             duck: None,
+            rr_t0: -1.0,
             kills: 0,
             pk: laser::Peek::new(),
             lz_tid: -1,

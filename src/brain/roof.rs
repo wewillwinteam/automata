@@ -167,6 +167,9 @@ impl Brain {
                 continue;
             }
             let d = dist2(r.keep, pos);
+            if p.roof_mode <= 0.0 && p.rr_on > 0.0 && d > p.rr_max_d && self.roof_sel != Some(i) {
+                continue;
+            }
             let mut s = 2.0 * r.setback.min(45.0) - p.roof_w_expo * r.expo - p.roof_w_dist * d + 0.2 * inner.min(120.0) - 0.4 * (r.height - 20.0).abs();
             if self.roof_sel == Some(i) {
                 s += 25.0;
@@ -221,7 +224,7 @@ impl Brain {
         self.roof_hold = false;
         self.roof_jet = false;
         let p = self.p.clone();
-        if p.roof_mode <= 0.0 {
+        if p.roof_mode <= 0.0 && p.rr_on <= 0.0 {
             return;
         }
         let Some(rm) = self.roof.clone() else { return };
@@ -229,6 +232,37 @@ impl Brain {
         let me = &obs.me;
         let pos = me.pos;
         let hpf = frac(me.hp, me.max_hp);
+        if p.roof_mode <= 0.0 {
+            // roof retreat: only during an episode that rr_n mechs in view started
+            let ok_mode = self.squad_mode() && !self.ffa.on && (p.rr_zone1 <= 0.0 || obs.zone.next_radius > 300.0);
+            let seen = self.mem.tracks.iter().filter(|tr| tr.kind == ActorKind::Mech && t - tr.last_seen < 2.0 && dist(tr.pos_at(t), pos) < p.rr_range).count();
+            let last_seen = self.mem.tracks.iter().filter(|tr| tr.kind == ActorKind::Mech).map(|tr| tr.last_seen).fold(-1e9, f64::max);
+            if self.rr_t0 < 0.0 {
+                if !ok_mode || zi.urgent || (seen as f64) < p.rr_n {
+                    return;
+                }
+                // a roof within reach?
+                let near = rm.regions.iter().enumerate().any(|(i, r)| {
+                    dist2(r.keep, pos) <= p.rr_max_d && r.setback >= p.roof_min_setback && r.height >= p.roof_min_h && r.height <= p.roof_max_h && !self.roof_ban.iter().any(|&(b, u)| b == i && t < u)
+                });
+                if !near {
+                    return;
+                }
+                self.rr_t0 = t;
+                self.roof_sel = None;
+                crate::runtime::log(&format!("RR start t={:.1} seen={} hp={:.2}", t, seen, hpf));
+            } else {
+                let done = !ok_mode || zi.urgent || t - self.rr_t0 > p.rr_max_s || (hpf >= p.rr_hp && t - last_seen > p.rr_quiet);
+                if done {
+                    crate::runtime::log(&format!("RR end t={:.1} after {:.1}s hp={:.2} on_roof={}", t, t - self.rr_t0, hpf, self.roof_on.is_some()));
+                    self.rr_t0 = -1.0;
+                    self.roof_sel = None;
+                    self.roof_on = None;
+                    self.roof_step = None;
+                    return;
+                }
+            }
+        }
         for ev in &obs.events {
             if let crate::proto::Event::Kill(_) = ev {
                 self.kills += 1;
@@ -308,8 +342,14 @@ impl Brain {
             self.roof_on = None;
             return;
         }
-        if hpf >= p.roof_fire_hp && lines < 2 {
+        if hpf >= p.roof_fire_hp && lines < 2 && !(p.roof_mode <= 0.0 && p.rr_passive > 0.0) {
             self.roof_rest = false;
+        }
+        if p.roof_mode <= 0.0 && p.rr_passive > 0.0 {
+            self.roof_rest = true;
+        }
+        if on && self.roof_first_t == t {
+            crate::runtime::log(&format!("RR on roof t={:.1} hp={:.2}", t, hpf));
         }
         if hpf < p.roof_rest_hp || lines >= 2 {
             self.roof_rest = true;

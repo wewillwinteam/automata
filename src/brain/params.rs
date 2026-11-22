@@ -273,6 +273,18 @@ pub struct Params {
     /// cover search: when no spot hides us from every threat, take the spot seen by the
     /// fewest of them (instead of running straight away); 0 = off
     pub cover_partial: f64,
+    /// roof retreat (practice): when rr_n mechs are seen within rr_range, retreat onto a roof
+    /// whose keep point is within rr_max_d; rr_passive 1 = only rest there and fight mechs that
+    /// climb up; leave at rr_hp HP once none seen for rr_quiet s, or after rr_max_s; 0 = off
+    pub rr_on: f64,
+    pub rr_n: f64,
+    pub rr_range: f64,
+    pub rr_max_d: f64,
+    pub rr_passive: f64,
+    pub rr_hp: f64,
+    pub rr_quiet: f64,
+    pub rr_max_s: f64,
+    pub rr_zone1: f64,
     /// after this many kills (squad play only), rest to full between fights
     pub rest_after_k: f64,
     /// the kill gate applies to the gated kill only, and opens ready_wait s after the previous kill
@@ -720,6 +732,15 @@ impl Default for Params {
             cover_trees: 0.0,
             lz_lethal_bonus: 0.0,
             cover_partial: 0.0,
+            rr_on: 0.0,
+            rr_n: 2.0,
+            rr_range: 150.0,
+            rr_max_d: 60.0,
+            rr_passive: 1.0,
+            rr_hp: 0.85,
+            rr_quiet: 6.0,
+            rr_max_s: 45.0,
+            rr_zone1: 0.0,
             rest_after_k: 0.0,
             ready_once: 0.0,
             ready_wait: 30.0,

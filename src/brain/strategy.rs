@@ -922,6 +922,7 @@ impl Brain {
         let hidden = |q: V3| -> bool { eyes.iter().all(|e| !world.sight(*e, up(q, h * 0.5)) && !world.sight(*e, up(q, h * 0.92))) };
         let z = &obs.zone;
         let mut best: Option<(f64, V3)> = None;
+        let tree_pen = p.cover_trees;
         let away = self.swarm_away.or(self.edge_away);
         let wb = (world.bounds.min_x, world.bounds.max_x, world.bounds.min_y, world.bounds.max_y);
         let edge_retreat = self.edge_away.is_some();
@@ -935,6 +936,10 @@ impl Brain {
             let out_next = (dist2v(q, z.next_center) - z.next_radius + 10.0).max(0.0);
             let near_threat = eyes.iter().map(|e| dist2(*e, q)).fold(f64::INFINITY, f64::min);
             let mut s = dist(q, pos) + 0.6 * out_next - 0.15 * near_threat.min(150.0) - bonus;
+            if tree_pen > 0.0 && !eyes.iter().all(|e| !world.sight_no_trees(*e, up(q, h * 0.5)) && !world.sight_no_trees(*e, up(q, h * 0.92))) {
+                // hidden only by trees: they stop sight, not shots
+                s += tree_pen;
+            }
             if edge_retreat {
                 // along the wall, never into a corner
                 let mut w = [q[0] - wb.0, wb.1 - q[0], q[1] - wb.2, wb.3 - q[1]];

@@ -498,7 +498,20 @@ impl Brain {
             } else {
                 let ready = w.charge >= full - 0.051;
                 let aligned = on(direct, tol_y, tol_p);
-                let part = w.stats.damage * (w.stats.min_frac + (1.0 - w.stats.min_frac) * (w.charge / full).clamp(0.0, 1.0));
+                let mut part = w.stats.damage * (w.stats.min_frac + (1.0 - w.stats.min_frac) * (w.charge / full).clamp(0.0, 1.0));
+                if p.lz_lethal_bonus > 0.0 {
+                    // the real shot: cube damage, x1.5 into its back, cook-off on a mortar carrier
+                    part *= 1.0 + self.cfg.cubes.damage_per_cube * me.cubes.min(self.cfg.cubes.stat_cap).max(0.0);
+                    if let Some(tr) = self.mem.tracks.iter().find(|x| x.id == tg.id) {
+                        let to_us = (me.pos[1] - tr.pos[1]).atan2(me.pos[0] - tr.pos[0]);
+                        if adiff(tr.aim[0], to_us).abs() > std::f64::consts::FRAC_PI_2 {
+                            part *= self.cfg.mech.rear_mult.max(1.0);
+                        }
+                        if tr.has(WeaponKind::Mortar) {
+                            part *= 1.0 + w.stats.cookoff.max(0.0);
+                        }
+                    }
+                }
                 let lethal = w.charge >= w.stats.min_charge && tg.hp > 0.0 && part >= tg.hp * 1.05;
                 // the early shot leaves on the next tick: the torso must already be on the line
                 let now_on = early && adiff(me.aim[0], direct[0]).abs() * direct[1].cos().max(0.2) <= tol_y && (me.aim[1] - direct[1]).abs() <= tol_p;

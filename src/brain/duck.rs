@@ -51,8 +51,11 @@ impl Brain {
                 pts.iter().all(|pt| !world.sight_no_trees(*e, *pt))
             })
         };
+        // seen-through-trees fallback: hidden from view (trees count), ranked duck_trees worse
+        let hidden_v = |q: V3| -> bool { eyes.iter().all(|e| !world.sight(*e, up(q, h * 0.5)) && !world.sight(*e, up(q, h * 0.92))) };
+        let tree_pen = p.duck_trees;
         if let Some((q, t0)) = self.duck {
-            if t - t0 < 4.0 && hidden(q) {
+            if t - t0 < 4.0 && (hidden(q) || (tree_pen > 0.0 && hidden_v(q))) {
                 return Some(q);
             }
         }
@@ -75,10 +78,16 @@ impl Brain {
                 let (x, y) = (pos[0] + rr * a.cos(), pos[1] + rr * a.sin());
                 let q0 = [x, y, fin(world.floor_below(x, y, pos[2] + 3.0), pos[2])];
                 let Some(q) = nav.snap(q0) else { continue };
-                if dist(q, q0) > 4.0 || !q.iter().all(|v| v.is_finite()) || !hidden(q) {
+                if dist(q, q0) > 4.0 || !q.iter().all(|v| v.is_finite()) {
                     continue;
                 }
-                let c = dist(q, pos);
+                let c = if hidden(q) {
+                    dist(q, pos)
+                } else if tree_pen > 0.0 && hidden_v(q) {
+                    dist(q, pos) + tree_pen
+                } else {
+                    continue;
+                };
                 if best.map_or(true, |b| c < b.0) {
                     best = Some((c, q));
                 }

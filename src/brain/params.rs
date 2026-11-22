@@ -261,6 +261,15 @@ pub struct Params {
     pub duck_r: f64,
     /// duck only from the mechs that can see us right now (else from all seen in 2 s)
     pub duck_los: f64,
+    /// duck: with no building cover in reach, use spots that trees hide from view, ranked
+    /// this many metres worse (0 = buildings and terrain only)
+    pub duck_trees: f64,
+    /// cover search: a spot hidden only by trees (they block sight, not shots) counts this
+    /// many metres worse than one hidden by buildings; 0 = trees count the same (as before)
+    pub cover_trees: f64,
+    /// laser early release: count cube damage, x1.5 into the target's back and mortar
+    /// cook-off when judging whether the current charge kills; 0 = off
+    pub lz_lethal_bonus: f64,
     /// after this many kills (squad play only), rest to full between fights
     pub rest_after_k: f64,
     /// the kill gate applies to the gated kill only, and opens ready_wait s after the previous kill
@@ -704,6 +713,9 @@ impl Default for Params {
             duck_ammo: 0.0,
             duck_r: 10.0,
             duck_los: 0.0,
+            duck_trees: 0.0,
+            cover_trees: 0.0,
+            lz_lethal_bonus: 0.0,
             rest_after_k: 0.0,
             ready_once: 0.0,
             ready_wait: 30.0,

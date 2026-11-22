@@ -509,6 +509,7 @@ impl Brain {
         let z = &obs.zone;
         let next_soon = z.shrink_start - t < 15.0;
 
+        let edge_on = self.edge_fight.is_some() && self.mode == Mode::Fight;
         for c in cands.iter_mut() {
             let (pts, blocked) = simulate(world, me, c.dir, c.speed, slow, c.boost, n);
             c.pts = pts;
@@ -550,6 +551,9 @@ impl Brain {
                 }
             }
             s -= p.w_blocked * c.blocked;
+            if edge_on {
+                s -= self.edge_cost(obs, world, end);
+            }
             s += p.w_smooth * (c.dir[0] * self.last_dir[0] + c.dir[1] * self.last_dir[1]);
             if let Some(j) = juke {
                 s += w_juke * self.juke_side * (c.dir[0] * j[0] + c.dir[1] * j[1]) * (c.speed / walk).min(1.3);

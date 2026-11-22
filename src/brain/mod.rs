@@ -29,6 +29,7 @@ mod tests;
 #[cfg(test)]
 mod laser_tests;
 mod wave;
+mod edge;
 
 pub use params::Params;
 
@@ -130,6 +131,12 @@ pub struct Brain {
     /// swarm escape: unit vector away from the attackers' centre while it runs, and since when
     pub(crate) swarm_away: Option<V2>,
     pub(crate) swarm_t: f64,
+    /// edge patrol: patrol direction along the boundary, fight band, its in/out wobble
+    /// (target distance, next switch), retreat direction along the boundary
+    pub(crate) edge_side: f64,
+    pub(crate) edge_fight: Option<(f64, f64)>,
+    pub(crate) edge_wob: (f64, f64),
+    pub(crate) edge_away: Option<V2>,
     pub(crate) kills: u32,
     pub(crate) pk: laser::Peek,
     pub(crate) lz_tid: i64,
@@ -215,6 +222,10 @@ impl Brain {
             pace_spot: None,
             swarm_away: None,
             swarm_t: -1e9,
+            edge_side: side,
+            edge_fight: None,
+            edge_wob: (0.0, -1e9),
+            edge_away: None,
             kills: 0,
             pk: laser::Peek::new(),
             lz_tid: -1,

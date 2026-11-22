@@ -206,7 +206,9 @@ impl Brain {
         }
 
         let was = self.mode == Mode::Retreat;
-        let mut want_retreat = if was { hpf < p.retreat_exit_hp } else { (hpf < p.retreat_hp && threat_near) || (n_att >= 2 && hpf < p.retreat_multi_hp) || (pressured && hpf < p.retreat_press_hp) };
+        self.edge_fight_update(obs, world);
+        let multi_hp = if p.edge_multi_hp >= 0.0 && self.edge_fight.is_some() { p.edge_multi_hp } else { p.retreat_multi_hp };
+        let mut want_retreat = if was { hpf < p.retreat_exit_hp } else { (hpf < p.retreat_hp && threat_near) || (n_att >= 2 && hpf < multi_hp) || (pressured && hpf < p.retreat_press_hp) };
         if want_retreat && !was {
             if let Some(tr) = &tgt {
                 if n_att <= 1 && tr.hp < me.hp * p.finish_ratio && t - tr.last_seen < 0.3 {
@@ -247,6 +249,7 @@ impl Brain {
         let farm = !held && self.gear_farm_mode(obs, tgt.as_ref());
         let gear_drop = self.gear_drop_ok(obs, tgt.as_ref());
         let hunt_near = if self.gear_on() { self.gear_near_real(obs) } else { near_mech };
+        self.edge_away_update(obs, world, want_retreat);
         let rest = !want_retreat && !held && self.want_rest(obs, &zi, n_att, near_mech, hpf);
         let pace = !want_retreat && !held && !zi.urgent && self.pace_active(obs, n_att, hpf);
         if want_retreat || held {
@@ -348,7 +351,12 @@ impl Brain {
             if let Some(q) = seek.filter(|_| p.seek_first > 0.5) {
                 mode = Mode::Hunt;
                 goal = Goal::Nav { pos: q, arrive: 15.0 };
-            } else if let Some((tg, g, id)) = self.choose_hunt(obs, world, &zi, hpf, hunt_near, muzzle) {
+            } else if let Some((tg, g, id)) = self.choose_hunt(obs, world, &zi, hpf, hunt_near, muzzle).filter(|(_, g, _)| {
+                !self.edge_mode(obs) || match g {
+                    Goal::Nav { pos: q, .. } | Goal::Range { pos: q, .. } => dist(*q, pos) <= p.edge_near_loot,
+                    _ => true,
+                }
+            }) {
                 mode = Mode::Hunt;
                 target = tg;
                 goal = g;
@@ -356,6 +364,9 @@ impl Brain {
             } else if let Some(q) = seek {
                 mode = Mode::Hunt;
                 goal = Goal::Nav { pos: q, arrive: 15.0 };
+            } else if let Some(q) = if self.edge_mode(obs) { self.edge_patrol_goal(obs, world, nav, &zi) } else { None } {
+                // zone 1: patrol just inside the nearest wall or zone line
+                goal = Goal::Nav { pos: q, arrive: 6.0 };
             } else if let Some(q) = self.prep_goal() {
                 goal = Goal::Nav { pos: q, arrive: 3.0 };
             } else {
@@ -908,7 +919,9 @@ impl Brain {
         let hidden = |q: V3| -> bool { eyes.iter().all(|e| !world.sight(*e, up(q, h * 0.5)) && !world.sight(*e, up(q, h * 0.92))) };
         let z = &obs.zone;
         let mut best: Option<(f64, V3)> = None;
-        let away = self.swarm_away;
+        let away = self.swarm_away.or(self.edge_away);
+        let wb = (world.bounds.min_x, world.bounds.max_x, world.bounds.min_y, world.bounds.max_y);
+        let edge_retreat = self.edge_away.is_some();
         let consider = |q: V3, bonus: f64, best: &mut Option<(f64, V3)>| {
             if dist2v(q, zi.cur_c) > zi.cur_r - 12.0 {
                 return;
@@ -919,6 +932,14 @@ impl Brain {
             let out_next = (dist2v(q, z.next_center) - z.next_radius + 10.0).max(0.0);
             let near_threat = eyes.iter().map(|e| dist2(*e, q)).fold(f64::INFINITY, f64::min);
             let mut s = dist(q, pos) + 0.6 * out_next - 0.15 * near_threat.min(150.0) - bonus;
+            if edge_retreat {
+                // along the wall, never into a corner
+                let mut w = [q[0] - wb.0, wb.1 - q[0], q[1] - wb.2, wb.3 - q[1]];
+                w.sort_by(|a, b| a.total_cmp(b));
+                if w[1] < 30.0 {
+                    s += 40.0;
+                }
+            }
             if let Some(a) = away {
                 // swarm escape: cover in the direction away from the attackers keeps them in front
                 let v = unit2(q[0] - pos[0], q[1] - pos[1]);

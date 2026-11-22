@@ -239,6 +239,21 @@ pub struct Params {
     /// practice only: with 3+ mechs hitting us in the last 5 s, back away at once (any HP),
     /// away from their centre, facing them, without starting new laser charges; 0 = off
     pub swarm_on: f64,
+    /// practice, zone 1: patrol a band edge_band_mid inside the nearest boundary (map wall or
+    /// zone line) instead of idling toward the centre; drone/crate hunts only within
+    /// edge_near_loot; 0 = off
+    pub edge_on: f64,
+    pub edge_band_mid: f64,
+    pub edge_patrol_step: f64,
+    pub edge_near_loot: f64,
+    /// fight band off the boundary with 2+ attackers (zigzag between edge_lo and edge_hi);
+    /// edge_hi 0 = off
+    pub edge_lo: f64,
+    pub edge_hi: f64,
+    pub edge_w: f64,
+    /// near the boundary, retreat with 2+ attackers only below this HP (instead of
+    /// retreat_multi_hp); < 0 = unchanged
+    pub edge_multi_hp: f64,
     /// after this many kills (squad play only), rest to full between fights
     pub rest_after_k: f64,
     /// the kill gate applies to the gated kill only, and opens ready_wait s after the previous kill
@@ -670,6 +685,14 @@ impl Default for Params {
             pace_max_s: 25.0,
             face_on: 0.0,
             swarm_on: 0.0,
+            edge_on: 0.0,
+            edge_band_mid: 32.0,
+            edge_patrol_step: 25.0,
+            edge_near_loot: 70.0,
+            edge_lo: 0.0,
+            edge_hi: 0.0,
+            edge_w: 2.0,
+            edge_multi_hp: -1.0,
             rest_after_k: 0.0,
             ready_once: 0.0,
             ready_wait: 30.0,

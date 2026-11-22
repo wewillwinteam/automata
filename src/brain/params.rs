@@ -200,6 +200,13 @@ pub struct Params {
     pub halt_k: f64,
     /// after this many kills (squad play only), stop engaging and only survive
     pub hold_k: f64,
+    /// practice only: before this time, search for house mechs (lost tracks, sounds, the
+    /// ring around the zone centre) instead of idling; 0 = off
+    pub seek_until: f64,
+    /// minimum HP fraction to search
+    pub seek_hp: f64,
+    /// search before farming NPCs and crates instead of after
+    pub seek_first: f64,
     /// after this many kills (squad play only), rest to full between fights
     pub rest_after_k: f64,
     /// the kill gate applies to the gated kill only, and opens ready_wait s after the previous kill
@@ -614,6 +621,9 @@ impl Default for Params {
             halt_wl: -1.0,
             halt_k: 0.0,
             hold_k: 0.0,
+            seek_until: 0.0,
+            seek_hp: 0.8,
+            seek_first: 0.0,
             rest_after_k: 0.0,
             ready_once: 0.0,
             ready_wait: 30.0,

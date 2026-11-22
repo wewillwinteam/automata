@@ -311,11 +311,18 @@ impl Brain {
             goal_id = l.id;
         } else {
             mode = Mode::Idle;
-            if let Some((tg, g, id)) = self.choose_hunt(obs, world, &zi, hpf, hunt_near, muzzle) {
+            let seek = self.seek_goal(obs, world, &zi, hpf);
+            if let Some(q) = seek.filter(|_| p.seek_first > 0.5) {
+                mode = Mode::Hunt;
+                goal = Goal::Nav { pos: q, arrive: 15.0 };
+            } else if let Some((tg, g, id)) = self.choose_hunt(obs, world, &zi, hpf, hunt_near, muzzle) {
                 mode = Mode::Hunt;
                 target = tg;
                 goal = g;
                 goal_id = id;
+            } else if let Some(q) = seek {
+                mode = Mode::Hunt;
+                goal = Goal::Nav { pos: q, arrive: 15.0 };
             } else if let Some(q) = self.prep_goal() {
                 goal = Goal::Nav { pos: q, arrive: 3.0 };
             } else {
@@ -459,6 +466,57 @@ impl Brain {
 
     pub(crate) fn in_play_pub(&self, obs: &Obs, zi: &ZoneInfo, q: V3, d: f64) -> bool {
         self.in_play(obs, zi, q, d)
+    }
+
+    /// Where to look for a house mech in the early game (practice only): the freshest
+    /// lost track, else a recent sound, else the next point round the zone centre.
+    fn seek_goal(&self, obs: &Obs, world: &World, zi: &ZoneInfo, hpf: f64) -> Option<V3> {
+        let p = &self.p;
+        let t = obs.t;
+        if p.seek_until <= 0.0 || t >= p.seek_until || hpf < p.seek_hp || !self.squad_mode() || self.ffa.on {
+            return None;
+        }
+        let me = obs.me.pos;
+        let mut best: Option<(f64, V3)> = None;
+        let offer = |s: f64, q: V3, best: &mut Option<(f64, V3)>| {
+            let d = dist2v(q, zi.cur_c);
+            if d < zi.cur_r - 15.0 && best.map_or(true, |b| s < b.0) {
+                *best = Some((s, q));
+            }
+        };
+        for tr in &self.mem.tracks {
+            if tr.kind != ActorKind::Mech || t - tr.last_seen < 0.5 {
+                continue;
+            }
+            let d = dist(tr.pos, me);
+            offer(d + 8.0 * (t - tr.last_seen), tr.pos, &mut best);
+        }
+        for s in &self.mem.sounds {
+            let far = match s.kind.as_str() {
+                "gun" => 220.0,
+                "laser" | "mortar" | "explosion" | "crate" => 200.0,
+                "lightning" | "laser_charge" => 120.0,
+                "boost" | "jet" => 75.0,
+                "step" | "reload" => 40.0,
+                _ => continue,
+            };
+            let d = match s.dist {
+                crate::proto::SoundDist::Near => 35.0,
+                crate::proto::SoundDist::Mid => 110.0_f64.min(far),
+                _ => far,
+            };
+            let q = ground(world, [me[0] + s.bearing.cos() * d, me[1] + s.bearing.sin() * d]);
+            offer(d + 8.0 * (t - s.t) + 30.0, q, &mut best);
+        }
+        if best.is_none() {
+            // sweep the ring round the zone centre, where the spawns are spread out
+            let c = obs.zone.center;
+            let r = dist2v(me, c).clamp(80.0, (obs.zone.radius * 0.8).max(80.0));
+            let a = (me[1] - c[1]).atan2(me[0] - c[0]) + self.juke_side * 70.0 / r;
+            let q = ground(world, [c[0] + r * a.cos(), c[1] + r * a.sin()]);
+            offer(1e6, q, &mut best);
+        }
+        best.map(|b| b.1).filter(|q| self.in_play(obs, zi, *q, dist(*q, me)))
     }
 
     fn in_play(&self, obs: &Obs, zi: &ZoneInfo, q: V3, d: f64) -> bool {

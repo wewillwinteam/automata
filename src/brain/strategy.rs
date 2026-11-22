@@ -215,6 +215,25 @@ impl Brain {
             }
         }
 
+        // swarm escape: 3+ attackers in 5 s -> back away now, at any HP; released when fewer
+        // than 2 are still on us (low-HP retreat then carries on as usual)
+        let att5: Vec<V3> = self.mem.tracks.iter().filter(|tr| tr.kind == ActorKind::Mech && t - tr.last_dmg_t < 5.0).map(|tr| tr.pos_at(t)).collect();
+        let swarm_now = p.swarm_on > 0.0 && self.squad_mode() && !self.ffa.on && att5.len() >= 3;
+        if swarm_now {
+            want_retreat = true;
+            self.swarm_t = t;
+            let (cx, cy) = att5.iter().fold((0.0, 0.0), |a, q| (a.0 + q[0], a.1 + q[1]));
+            let n = att5.len() as f64;
+            self.swarm_away = Some(unit2(pos[0] - cx / n, pos[1] - cy / n));
+        } else {
+            if was && t - self.swarm_t < 30.0 && att5.len() < 2 && hpf >= p.retreat_hp {
+                want_retreat = false;
+            }
+            if att5.len() < 2 {
+                self.swarm_away = None;
+                self.swarm_t = -1e9;
+            }
+        }
         if held && (n_att >= 1 || near_mech < 120.0 || near_mem < 100.0 || t - self.mem.last_damage_t < 3.0 || (was && near_mem < 170.0)) {
             want_retreat = true;
         }
@@ -889,6 +908,7 @@ impl Brain {
         let hidden = |q: V3| -> bool { eyes.iter().all(|e| !world.sight(*e, up(q, h * 0.5)) && !world.sight(*e, up(q, h * 0.92))) };
         let z = &obs.zone;
         let mut best: Option<(f64, V3)> = None;
+        let away = self.swarm_away;
         let consider = |q: V3, bonus: f64, best: &mut Option<(f64, V3)>| {
             if dist2v(q, zi.cur_c) > zi.cur_r - 12.0 {
                 return;
@@ -898,7 +918,12 @@ impl Brain {
             }
             let out_next = (dist2v(q, z.next_center) - z.next_radius + 10.0).max(0.0);
             let near_threat = eyes.iter().map(|e| dist2(*e, q)).fold(f64::INFINITY, f64::min);
-            let s = dist(q, pos) + 0.6 * out_next - 0.15 * near_threat.min(150.0) - bonus;
+            let mut s = dist(q, pos) + 0.6 * out_next - 0.15 * near_threat.min(150.0) - bonus;
+            if let Some(a) = away {
+                // swarm escape: cover in the direction away from the attackers keeps them in front
+                let v = unit2(q[0] - pos[0], q[1] - pos[1]);
+                s += 25.0 * (1.0 - (v[0] * a[0] + v[1] * a[1]));
+            }
             if best.map_or(true, |b| s < b.0) {
                 *best = Some((s, q));
             }

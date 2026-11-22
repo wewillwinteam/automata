@@ -127,6 +127,9 @@ pub struct Brain {
     /// pacing after a kill: (kill time, kill position), and the chosen hideout
     pub(crate) pace_kill: Option<(f64, V3)>,
     pub(crate) pace_spot: Option<V3>,
+    /// swarm escape: unit vector away from the attackers' centre while it runs, and since when
+    pub(crate) swarm_away: Option<V2>,
+    pub(crate) swarm_t: f64,
     pub(crate) kills: u32,
     pub(crate) pk: laser::Peek,
     pub(crate) lz_tid: i64,
@@ -210,6 +213,8 @@ impl Brain {
             wall: None,
             pace_kill: None,
             pace_spot: None,
+            swarm_away: None,
+            swarm_t: -1e9,
             kills: 0,
             pk: laser::Peek::new(),
             lz_tid: -1,
@@ -260,8 +265,29 @@ impl Brain {
         self.decide(obs, world, nav);
         self.laser_pre(obs, world, nav);
         let mut fc = self.fire_control(obs, world);
-        if let Some(y) = self.gear_sweep(obs, fc.target.is_some() || fc.fire[0] || fc.fire[1] || fc.charging) {
+        let busy = fc.target.is_some() || fc.fire[0] || fc.fire[1] || fc.charging;
+        let swarm = self.swarm_away.is_some();
+        let facing = if !busy && ((self.p.face_on > 0.0 && self.squad_mode() && !self.ffa.on) || swarm) { self.face_yaw(obs) } else { None };
+        if let Some(y) = facing {
             fc.aim = [y, 0.0];
+        }
+        // the loot sweep turns the torso away from the threats: only without a threat to face,
+        // or (to find a laser) when we have none and nobody has hit us for 5 s
+        let has_laser = obs.me.weapons.iter().flatten().any(|w| w.kind == crate::proto::WeaponKind::Laser);
+        if facing.is_none() || (!has_laser && !swarm && obs.t - self.mem.last_damage_t > 5.0) {
+            if let Some(y) = self.gear_sweep(obs, busy) {
+                fc.aim = [y, 0.0];
+            }
+        }
+        if swarm {
+            // charging halves our speed: no new laser charge while backing away
+            for (i, w) in obs.me.weapons.iter().take(2).enumerate() {
+                if let Some(w) = w {
+                    if w.kind == crate::proto::WeaponKind::Laser && w.charge <= 0.0 {
+                        fc.fire[i] = false;
+                    }
+                }
+            }
         }
         let mut mv = self.plan_move(obs, world, nav, budget, &fc);
         if !mv.boost && self.gear_boost(obs) && mv.dir[0].hypot(mv.dir[1]) > 0.5 {
@@ -299,6 +325,46 @@ impl Brain {
         }
         sanitize(&mut act, &obs.me.stats);
         act
+    }
+
+    /// Where to point the torso when not shooting: the attackers of the last 5 s first, else
+    /// the nearest mechs seen in 3 s (within 150 m); the middle of up to three of them when
+    /// they all fit in the front half, else the most recent attacker. None near a drone
+    /// (within 50 m) when nothing is attacking, so the normal aim can watch it.
+    fn face_yaw(&self, obs: &Obs) -> Option<f64> {
+        let t = obs.t;
+        let me = obs.me.pos;
+        let mut th: Vec<(f64, f64)> = Vec::new();
+        let mut attacked = false;
+        for tr in &self.mem.tracks {
+            if tr.kind != crate::proto::ActorKind::Mech {
+                continue;
+            }
+            let att = t - tr.last_dmg_t < 5.0 && t - tr.last_seen < 5.0;
+            let tp = tr.pos_at(t);
+            let d = dist(tp, me);
+            if !(att || (t - tr.last_seen < 3.0 && d < 150.0)) {
+                continue;
+            }
+            attacked |= att;
+            let pr = if att { 1000.0 - 10.0 * (t - tr.last_dmg_t) } else { 500.0 - d };
+            th.push((pr, (tp[1] - me[1]).atan2(tp[0] - me[0])));
+        }
+        if th.is_empty() {
+            return None;
+        }
+        if !attacked && self.mem.tracks.iter().any(|n| n.kind == crate::proto::ActorKind::Npc && t - n.last_seen < 2.0 && dist(n.pos, me) < 50.0) {
+            return None;
+        }
+        th.sort_by(|a, b| b.0.total_cmp(&a.0));
+        th.truncate(3);
+        let (sx, sy) = th.iter().fold((0.0, 0.0), |a, x| (a.0 + x.1.cos(), a.1 + x.1.sin()));
+        let mean = sy.atan2(sx);
+        if th.iter().all(|x| adiff(x.1, mean).abs() < 1.48) {
+            Some(mean)
+        } else {
+            Some(th[0].1)
+        }
     }
 
     /// Silent travel (practice): nothing in view, in the zone, not hit lately, not fighting.

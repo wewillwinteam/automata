@@ -233,6 +233,12 @@ pub struct Params {
     pub pace_on: f64,
     pub pace_hp: f64,
     pub pace_max_s: f64,
+    /// practice only: when not shooting, turn the torso to the most dangerous known mechs
+    /// (recent attackers first, else the nearest seen), so hits land on the front; 0 = off
+    pub face_on: f64,
+    /// practice only: with 3+ mechs hitting us in the last 5 s, back away at once (any HP),
+    /// away from their centre, facing them, without starting new laser charges; 0 = off
+    pub swarm_on: f64,
     /// after this many kills (squad play only), rest to full between fights
     pub rest_after_k: f64,
     /// the kill gate applies to the gated kill only, and opens ready_wait s after the previous kill
@@ -662,6 +668,8 @@ impl Default for Params {
             pace_on: 0.0,
             pace_hp: 0.9,
             pace_max_s: 25.0,
+            face_on: 0.0,
+            swarm_on: 0.0,
             rest_after_k: 0.0,
             ready_once: 0.0,
             ready_wait: 30.0,

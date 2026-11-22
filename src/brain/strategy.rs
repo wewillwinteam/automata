@@ -294,7 +294,10 @@ impl Brain {
             let pref = self.gear_range(obs, tr, base);
             self.stand_off = far && pref >= base;
             let hold = p.hold_hunter > 0.0 && !los && self.holds_for(obs, tr);
-            let g0 = if los {
+            let g0 = if let Some(q) = self.wall_goal(obs, world, nav, tr, pref).filter(|_| los) {
+                // swarmed: fight from the spot that shows the least of us, back to a wall
+                Goal::Nav { pos: q, arrive: 1.5 }
+            } else if los {
                 Goal::Range { pos: tp, pref }
             } else if hold {
                 // wait where we are while it closes in, back off once it is nearer than the preferred distance
@@ -526,6 +529,85 @@ impl Brain {
             offer(1e6, q, &mut best);
         }
         best.map(|b| b.1).filter(|q| self.in_play(obs, zi, *q, dist(*q, me)))
+    }
+
+    /// Back to the wall (practice): with 2+ mechs hitting us in the last 5 s, the nearby spot
+    /// that keeps the target in sight and in range and is seen by the fewest attackers, each
+    /// one behind us (outside the front half facing the target) counting x1.5.
+    fn wall_goal(&mut self, obs: &Obs, world: &World, nav: &Nav, tr: &Track, pref: f64) -> Option<V3> {
+        let p = &self.p;
+        let t = obs.t;
+        if p.wall_on <= 0.0 || !self.squad_mode() || self.ffa.on {
+            self.wall = None;
+            return None;
+        }
+        let me = &obs.me;
+        let pos = me.pos;
+        let tp = tr.pos_at(t);
+        let eyes: Vec<V3> = self
+            .mem
+            .tracks
+            .iter()
+            .filter(|a| a.kind == ActorKind::Mech && t - a.last_dmg_t < 5.0 && t - a.last_seen < 3.0)
+            .map(|a| up(a.pos_at(t), self.cfg.mech.eye_height * (1.0 + self.cfg.cubes.size_per_cube * a.cubes.max(0.0))))
+            .collect();
+        if eyes.len() < 2 {
+            self.wall = None;
+            return None;
+        }
+        let h = me.stats.height.max(1.0);
+        let mz = me.stats.muzzle_height.max(1.0);
+        let tc = up(tp, self.cfg.mech.height * 0.5);
+        let cost = |q: V3| -> f64 {
+            let f = unit2(tp[0] - q[0], tp[1] - q[1]);
+            let mut c = 0.0;
+            for e in &eyes {
+                if world.sight(*e, up(q, h * 0.5)) || world.sight(*e, up(q, h * 0.92)) {
+                    let a = unit2(e[0] - q[0], e[1] - q[1]);
+                    c += if a[0] * f[0] + a[1] * f[1] < 0.0 { 1.5 } else { 1.0 };
+                }
+            }
+            c
+        };
+        let ok = |q: V3| -> bool {
+            let d = dist2(q, tp);
+            d >= 0.6 * pref && d <= 1.3 * pref.max(20.0) && world.sight(up(q, mz), tc)
+        };
+        let here = cost(pos);
+        if let Some((q, t0)) = self.wall {
+            if t - t0 < 2.5 && ok(q) && cost(q) <= here {
+                return Some(q);
+            }
+        }
+        let mut best: Option<(f64, V3)> = None;
+        'outer: for &r in &[8.0, 16.0, 25.0] {
+            for k in 0..8 {
+                if self.spent_ms() > 10.0 {
+                    break 'outer;
+                }
+                let a = k as f64 * std::f64::consts::FRAC_PI_4 + r * 0.05;
+                let (x, y) = (pos[0] + r * a.cos(), pos[1] + r * a.sin());
+                let q0 = [x, y, fin(world.floor_below(x, y, pos[2] + 3.0), pos[2])];
+                let Some(q) = nav.snap(q0) else { continue };
+                if dist(q, q0) > 6.0 || !q.iter().all(|v| v.is_finite()) || !ok(q) {
+                    continue;
+                }
+                let c = cost(q) + 0.02 * r;
+                if best.map_or(true, |b| c < b.0) {
+                    best = Some((c, q));
+                }
+            }
+        }
+        match best {
+            Some((c, q)) if c < here - 0.4 => {
+                self.wall = Some((q, t));
+                Some(q)
+            }
+            _ => {
+                self.wall = None;
+                None
+            }
+        }
     }
 
     /// A point behind a target that is not facing us and has not hurt us lately, or None.

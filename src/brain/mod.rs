@@ -122,6 +122,11 @@ pub struct Brain {
     pub(crate) stand_off: bool,
     /// sneaking up on an unaware target: move silently this tick
     pub(crate) flank_quiet: bool,
+    /// back-to-the-wall spot chosen while swarmed, and when
+    pub(crate) wall: Option<(V3, f64)>,
+    /// pacing after a kill: (kill time, kill position), and the chosen hideout
+    pub(crate) pace_kill: Option<(f64, V3)>,
+    pub(crate) pace_spot: Option<V3>,
     pub(crate) kills: u32,
     pub(crate) pk: laser::Peek,
     pub(crate) lz_tid: i64,
@@ -202,6 +207,9 @@ impl Brain {
             roof_first_t: -1.0,
             stand_off: false,
             flank_quiet: false,
+            wall: None,
+            pace_kill: None,
+            pace_spot: None,
             kills: 0,
             pk: laser::Peek::new(),
             lz_tid: -1,

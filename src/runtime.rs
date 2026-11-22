@@ -13,9 +13,13 @@ use crate::brain::Brain;
 use crate::proto::{Action, Hello, Obs, Ready, ServerMsg};
 use crate::Shared;
 
-pub const BOT_NAME: &str = "not-even-close";
+pub const BOT_NAME: &str = "automata-hybrid";
 
 static LOG: AtomicBool = AtomicBool::new(false);
+
+/// Set by the Brain once it has seen free-for-all play (mechs hurting each other).
+/// From then on the peer bot's answers are sent instead of ours.
+pub static FFA_SEEN: AtomicBool = AtomicBool::new(false);
 
 pub fn log_enabled() -> bool {
     LOG.load(Ordering::Relaxed)
@@ -211,6 +215,14 @@ impl Out {
         let _ = lock.flush();
     }
 
+    fn raw(&mut self, line: &str) {
+        let out = io::stdout();
+        let mut lock = out.lock();
+        let _ = lock.write_all(line.as_bytes());
+        let _ = lock.write_all(b"\n");
+        let _ = lock.flush();
+    }
+
     fn fallback(&self, tick: i64) -> Action {
         Action { tick, move_: self.last_move, boost: self.last_boost, aim: self.last_aim, ..Default::default() }
     }
@@ -296,11 +308,85 @@ fn parse_hello(line: &str) -> Option<Hello> {
     }
 }
 
+
+/// The free-for-all bot (HYBRID_PEER, the try_again C bot) as a child process.
+/// It gets every line we get, so its state is current when it takes over.
+struct Peer {
+    stdin: Option<std::process::ChildStdin>,
+    latest: Arc<(std::sync::Mutex<(i64, String)>, std::sync::Condvar)>,
+    _child: std::process::Child,
+}
+
+impl Peer {
+    fn spawn() -> Option<Peer> {
+        use std::process::{Command, Stdio};
+        let path = std::env::var("HYBRID_PEER").ok().filter(|p| !p.is_empty())?;
+        let mut child = match Command::new(&path).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn() {
+            Ok(c) => c,
+            Err(e) => {
+                log(&format!("peer {path} failed to start: {e}"));
+                return None;
+            }
+        };
+        let stdin = child.stdin.take();
+        let stdout = child.stdout.take()?;
+        let latest = Arc::new((std::sync::Mutex::new((-1i64, String::new())), std::sync::Condvar::new()));
+        let l2 = latest.clone();
+        thread::Builder::new()
+            .name("peer".into())
+            .spawn(move || {
+                let r = io::BufReader::new(stdout);
+                for line in r.lines() {
+                    let Ok(line) = line else { break };
+                    let tick = serde_json::from_str::<serde_json::Value>(&line).ok().and_then(|v| v.get("tick").and_then(|t| t.as_f64()));
+                    if let Some(t) = tick {
+                        let (m, c) = &*l2;
+                        if let Ok(mut g) = m.lock() {
+                            *g = (t as i64, line);
+                        }
+                        c.notify_all();
+                    }
+                }
+            })
+            .ok()?;
+        Some(Peer { stdin, latest, _child: child })
+    }
+
+    fn send(&mut self, line: &str) {
+        if let Some(w) = self.stdin.as_mut() {
+            if w.write_all(line.as_bytes()).and_then(|_| w.write_all(b"\n")).and_then(|_| w.flush()).is_err() {
+                log("peer stdin closed");
+                self.stdin = None;
+            }
+        }
+    }
+
+    /// The peer's answer to this tick, if it arrives before the deadline.
+    fn wait(&self, tick: i64, deadline: Instant) -> Option<String> {
+        let (m, c) = &*self.latest;
+        let mut g = m.lock().ok()?;
+        loop {
+            if g.0 == tick {
+                return Some(g.1.clone());
+            }
+            let now = Instant::now();
+            if now >= deadline || self.stdin.is_none() {
+                return None;
+            }
+            g = c.wait_timeout(g, deadline - now).ok()?.0;
+        }
+    }
+}
+
 /// The process main loop. Returns the exit code.
 pub fn run() -> i32 {
     LOG.store(std::env::var("MECH_LOG").map(|v| v == "1").unwrap_or(false), Ordering::Relaxed);
     silence_panics();
     let start = Instant::now();
+    let mut peer = Peer::spawn();
+    if std::env::var("HYBRID_FORCE").map(|v| v == "1").unwrap_or(false) {
+        FFA_SEEN.store(true, Ordering::Relaxed);
+    }
     let rx = spawn_reader();
 
     let mut pending: Vec<(Instant, String)> = Vec::new();
@@ -308,6 +394,9 @@ pub fn run() -> i32 {
         let Ok(batch) = rx.recv() else { return 0 };
         let mut it = batch.into_iter();
         while let Some((_, line)) = it.next() {
+            if let Some(p) = peer.as_mut() {
+                p.send(&line);
+            }
             if let Some(h) = parse_hello(&line) {
                 pending.extend(it);
                 break 'h h;
@@ -330,6 +419,10 @@ pub fn run() -> i32 {
     log(&format!("ready after {:?} (shared loaded after {:?})", start.elapsed(), loaded));
 
     let (mut answered, mut fallbacks, mut panics) = (0u64, 0u64, 0u64);
+    let mut relayed = false;
+    // The peer also plays the opening: until lead_s, before any free-for-all
+    // signal has had time to show, its cautious start loses fewer mechs.
+    let lead_s: f64 = std::env::var("HYBRID_LEAD_S").ok().and_then(|v| v.parse().ok()).unwrap_or(0.0);
     loop {
         let mut lines = std::mem::take(&mut pending);
         if lines.is_empty() {
@@ -338,6 +431,11 @@ pub fn run() -> i32 {
         }
         while let Ok(x) = rx.try_recv() {
             lines.extend(x);
+        }
+        if let Some(p) = peer.as_mut() {
+            for (_, line) in &lines {
+                p.send(line);
+            }
         }
         // Newest observation wins; "end" anywhere ends the process.
         let mut newest: Option<(Instant, Result<Box<Obs>, i64>)> = None;
@@ -376,6 +474,7 @@ pub fn run() -> i32 {
             }
         };
         let tick = obs.tick;
+        let opening = obs.t < lead_s;
         let mut hold = [false; 2];
         for (i, w) in obs.me.weapons.iter().take(2).enumerate() {
             hold[i] = w.as_ref().map_or(false, |w| w.kind == crate::proto::WeaponKind::Laser && w.charge > 0.0);
@@ -404,6 +503,18 @@ pub fn run() -> i32 {
                 Ok(_) => continue,
                 Err(RecvTimeoutError::Timeout) => break,
                 Err(RecvTimeoutError::Disconnected) => break,
+            }
+        }
+        let ffa = FFA_SEEN.load(Ordering::Relaxed);
+        if ffa || opening {
+            if let Some(line) = peer.as_ref().and_then(|p| p.wait(tick, deadline)) {
+                if ffa && !relayed {
+                    log(&format!("free-for-all: peer takes over at tick {tick}"));
+                    relayed = true;
+                }
+                answered += 1;
+                out.raw(&line);
+                continue;
             }
         }
         match action {

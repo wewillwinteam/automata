@@ -232,7 +232,12 @@ impl Brain {
             self.cad.update(obs, self.p.cad_period, self.p.cad_snap);
         }
         self.wave_update(obs, world, nav);
-        self.ffa.update(obs, &self.mem.tracks, self.p.ffa_on > 0.5 || self.p.mode_detect > 0.5);
+        // Detection always runs (the params still decide whether OUR play changes);
+        // the runtime hands control to the peer bot once it fires.
+        self.ffa.update(obs, &self.mem.tracks, true);
+        if self.ffa.on {
+            crate::runtime::FFA_SEEN.store(true, std::sync::atomic::Ordering::Relaxed);
+        }
         self.order.update(obs);
         self.tele_update(obs);
         if self.p.halt_multi >= 1.0 && !self.order.halted && self.order.on_us(obs.t) as f64 >= self.p.halt_multi {

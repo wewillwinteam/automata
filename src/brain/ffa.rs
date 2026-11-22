@@ -16,11 +16,15 @@ pub(crate) struct Ffa {
     pub foreign: Vec<(i64, f64)>,
     beam_last: Vec<(i64, f64)>,
     pub seed: i64,
+    /// Thresholds: other-mech damage signals, and deaths beyond our kills (before 75 s).
+    sig_n: u32,
+    death_n: i64,
 }
 
 impl Ffa {
     pub fn new(seed: i64) -> Ffa {
-        Ffa { seed, ..Default::default() }
+        let env = |k: &str, d: f64| std::env::var(k).ok().and_then(|v| v.parse::<f64>().ok()).unwrap_or(d);
+        Ffa { seed, sig_n: env("FFA_SIG_N", 2.0) as u32, death_n: env("FFA_DEATH_N", 1.0) as i64, ..Default::default() }
     }
 
     pub fn foreign_t(&self, id: i64) -> f64 {
@@ -72,7 +76,7 @@ impl Ffa {
             return;
         }
         let deaths = self.alive0 - obs.alive;
-        if t < 75.0 && deaths >= self.kills + 2 {
+        if t < 75.0 && deaths >= self.kills + self.death_n {
             self.set(t, 1);
         }
         let is_npc = |id: i64| tracks.iter().any(|tr| tr.id == id && tr.kind == ActorKind::Npc) || obs.mechs.iter().any(|m| m.id == id && m.kind == ActorKind::Npc);
@@ -125,7 +129,7 @@ impl Ffa {
         if self.seen_hp.len() > 32 {
             self.seen_hp.remove(0);
         }
-        if self.sig >= 3 {
+        if self.sig >= self.sig_n {
             self.set(t, 2);
         }
     }

@@ -35,6 +35,8 @@ impl Brain {
             .iter()
             .filter(|tr| tr.kind == ActorKind::Mech && t - tr.last_seen < 2.0 && (t - tr.last_dmg_t < 5.0 || dist(tr.pos_at(t), me.pos) < 150.0))
             .map(|tr| up(tr.pos_at(t), self.cfg.mech.eye_height * (1.0 + self.cfg.cubes.size_per_cube * tr.cubes.max(0.0))))
+            // duck_los: only the mechs that have a line to us right now
+            .filter(|e| p.duck_los <= 0.0 || world.sight_no_trees(*e, up(me.pos, me.stats.height * 0.5)) || world.sight_no_trees(*e, up(me.pos, me.stats.height * 0.92)))
             .collect();
         if eyes.is_empty() {
             self.duck = None;
@@ -61,7 +63,7 @@ impl Brain {
             return Some(pos);
         }
         let mut best: Option<(f64, V3)> = None;
-        'outer: for &rr in &[3.0, 5.0, 7.5, 10.0] {
+        'outer: for &rr in &[3.0, 5.0, 7.5, 10.0, 14.0, 18.0] {
             if rr > p.duck_r {
                 break;
             }

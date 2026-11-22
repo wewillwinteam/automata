@@ -259,6 +259,8 @@ pub struct Params {
     pub duck_on: f64,
     pub duck_ammo: f64,
     pub duck_r: f64,
+    /// duck only from the mechs that can see us right now (else from all seen in 2 s)
+    pub duck_los: f64,
     /// after this many kills (squad play only), rest to full between fights
     pub rest_after_k: f64,
     /// the kill gate applies to the gated kill only, and opens ready_wait s after the previous kill
@@ -701,6 +703,7 @@ impl Default for Params {
             duck_on: 0.0,
             duck_ammo: 0.0,
             duck_r: 10.0,
+            duck_los: 0.0,
             rest_after_k: 0.0,
             ready_once: 0.0,
             ready_wait: 30.0,

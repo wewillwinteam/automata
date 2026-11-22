@@ -1,4 +1,4 @@
-# mech-royale-automata
+# automata
 
 A Mech Royale (`mechfight/1`) bot for the Builders Buildathon.
 

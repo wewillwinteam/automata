@@ -263,7 +263,7 @@ impl Brain {
             mv.jump = mv.jump || j;
             mv.boost = mv.boost || b;
         }
-        if self.flank_quiet {
+        if self.flank_quiet || self.quiet_now(obs) {
             // below sound.step_speed (5 m/s) a mech makes no step sounds
             let k = (4.6 / obs.me.stats.walk_speed.max(1.0)).min(1.0);
             mv.dir = [mv.dir[0] * k, mv.dir[1] * k];
@@ -291,6 +291,22 @@ impl Brain {
         }
         sanitize(&mut act, &obs.me.stats);
         act
+    }
+
+    /// Silent travel (practice): nothing in view, in the zone, not hit lately, not fighting.
+    fn quiet_now(&self, obs: &Obs) -> bool {
+        self.p.quiet_travel > 0.0
+            && self.squad_mode()
+            && !self.ffa.on
+            && matches!(self.mode, Mode::Idle | Mode::Hunt | Mode::Loot | Mode::Drop)
+            && obs.me.in_zone
+            && obs.t - self.mem.last_damage_t > 3.0
+            && !obs.mechs.iter().any(|m| m.kind == crate::proto::ActorKind::Mech && m.id != obs.me.id)
+    }
+
+    /// No more farming by gunfire (practice): enough kills that several mechs hunt us.
+    pub(crate) fn farm_off(&self) -> bool {
+        self.p.farm_stop_k >= 1.0 && self.squad_mode() && !self.ffa.on && self.wave.kills as f64 >= self.p.farm_stop_k
     }
 
     /// Opponents are assumed to be one squad until free-for-all play is detected.

@@ -342,7 +342,7 @@ impl Brain {
                 goal_id = -1;
             }
         }
-        self.allow_crates = matches!(mode, Mode::Hunt | Mode::Loot | Mode::Idle) && hpf >= p.crate_min_hp && hunt_near > if self.gate_closed(obs) { p.ready_safe_range } else { p.hunt_safe_range };
+        self.allow_crates = !self.farm_off() && matches!(mode, Mode::Hunt | Mode::Loot | Mode::Idle) && hpf >= p.crate_min_hp && hunt_near > if self.gate_closed(obs) { p.ready_safe_range } else { p.hunt_safe_range };
         if mode != Mode::Retreat {
             self.cover = None;
         }
@@ -636,7 +636,7 @@ impl Brain {
         let me = &obs.me;
         let t = obs.t;
         let safe = if self.gate_closed(obs) { p.ready_safe_range } else { p.hunt_safe_range };
-        if hpf < p.hunt_min_hp || near_mech < safe {
+        if hpf < p.hunt_min_hp || near_mech < safe || self.farm_off() {
             return None;
         }
         let more_cubes = me.cubes < self.cube_cap();

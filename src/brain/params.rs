@@ -214,6 +214,12 @@ pub struct Params {
     pub flank_back: f64,
     /// within this distance of an unaware target, walk below the 5 m/s step-sound speed
     pub flank_quiet_r: f64,
+    /// practice only: travel below the step-sound speed (no boost) whenever no mech is in
+    /// view, we are inside the zone and not under fire; 0 = off
+    pub quiet_travel: f64,
+    /// practice only: from this many kills on (each kill adds a hunter), stop shooting
+    /// crates and drones for cubes, since gunfire carries 320 m; 0 = off
+    pub farm_stop_k: f64,
     /// after this many kills (squad play only), rest to full between fights
     pub rest_after_k: f64,
     /// the kill gate applies to the gated kill only, and opens ready_wait s after the previous kill
@@ -634,6 +640,8 @@ impl Default for Params {
             flank_on: 0.0,
             flank_back: 45.0,
             flank_quiet_r: 90.0,
+            quiet_travel: 0.0,
+            farm_stop_k: 0.0,
             rest_after_k: 0.0,
             ready_once: 0.0,
             ready_wait: 30.0,

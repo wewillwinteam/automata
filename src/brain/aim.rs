@@ -152,7 +152,7 @@ impl Brain {
                 continue;
             }
             let attacker = t - tr.last_dmg_t < 3.0;
-            let hunted = self.target == Tgt::Npc(tr.id) || self.gear_npc_ok(obs, tr);
+            let hunted = !self.farm_off() && (self.target == Tgt::Npc(tr.id) || self.gear_npc_ok(obs, tr));
             if (!attacker && !hunted) || (self.roof_hold && t - tr.last_dmg_t > 1.5) {
                 continue;
             }

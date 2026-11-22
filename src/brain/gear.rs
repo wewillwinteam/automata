@@ -142,7 +142,7 @@ impl Brain {
                 }
             }
         }
-        if best.is_none() && wants_cube && p.gear_npc_goal_r > 0.0 && real > p.gear_safe_r && tgt_d > p.gear_fight_keep && frac(me.hp, me.max_hp) > 0.6 {
+        if best.is_none() && wants_cube && !self.farm_off() && p.gear_npc_goal_r > 0.0 && real > p.gear_safe_r && tgt_d > p.gear_fight_keep && frac(me.hp, me.max_hp) > 0.6 {
             for tr in &self.mem.tracks {
                 if tr.kind != ActorKind::Npc || t - tr.last_seen > 20.0 || self.mem.blacklisted(tr.id, t) {
                     continue;

@@ -33,3 +33,5 @@ Two bots in one image, one answer per tick:
 Switches for testing: `HYBRID_FORCE=1` (relay from the first tick),
 `HYBRID_LEAD_S` (let the child play the opening), `FFA_SIG_N` / `FFA_DEATH_N`
 (detector thresholds, default 3 / 2).
+
+Variant D (rear approach 25 m behind), resubmitted as a noise check.

@@ -238,7 +238,20 @@ impl Brain {
             let seen = self.mem.tracks.iter().filter(|tr| tr.kind == ActorKind::Mech && t - tr.last_seen < 2.0 && dist(tr.pos_at(t), pos) < p.rr_range).count();
             let last_seen = self.mem.tracks.iter().filter(|tr| tr.kind == ActorKind::Mech).map(|tr| tr.last_seen).fold(-1e9, f64::max);
             if self.rr_t0 < 0.0 {
-                if !ok_mode || zi.urgent || (seen as f64) < p.rr_n {
+                let trig = if p.rr_att > 0.0 {
+                    // in a fight with rr_att mechs hitting us, losing HP, for rr_after_s
+                    let att = self.mem.tracks.iter().filter(|tr| tr.kind == ActorKind::Mech && t - tr.last_dmg_t < 5.0).count();
+                    let now_on = (att as f64) >= p.rr_att && hpf < p.rr_trig_hp;
+                    if !now_on {
+                        self.rr_swarm_since = -1.0;
+                    } else if self.rr_swarm_since < 0.0 {
+                        self.rr_swarm_since = t;
+                    }
+                    now_on && t - self.rr_swarm_since >= p.rr_after_s
+                } else {
+                    (seen as f64) >= p.rr_n
+                };
+                if !ok_mode || zi.urgent || !trig {
                     return;
                 }
                 // a roof within reach?

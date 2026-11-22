@@ -145,6 +145,8 @@ pub struct Brain {
     /// roof retreat, cover first: the hidden spot at the building's foot, and whether climbing
     pub(crate) rr_base: Option<V3>,
     pub(crate) rr_climb: bool,
+    /// since when the roof-retreat fight trigger has held (< 0 when not)
+    pub(crate) rr_swarm_since: f64,
     pub(crate) kills: u32,
     pub(crate) pk: laser::Peek,
     pub(crate) lz_tid: i64,
@@ -238,6 +240,7 @@ impl Brain {
             rr_t0: -1.0,
             rr_base: None,
             rr_climb: false,
+            rr_swarm_since: -1.0,
             kills: 0,
             pk: laser::Peek::new(),
             lz_tid: -1,

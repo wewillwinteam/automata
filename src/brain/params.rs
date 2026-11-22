@@ -285,6 +285,9 @@ pub struct Params {
     pub rr_quiet: f64,
     pub rr_max_s: f64,
     pub rr_zone1: f64,
+    /// roof retreat: first go to a spot at the building's foot, on the far side from the
+    /// attackers and hidden from all of them, and climb only from there while hidden; 0 = off
+    pub rr_cover_first: f64,
     /// after this many kills (squad play only), rest to full between fights
     pub rest_after_k: f64,
     /// the kill gate applies to the gated kill only, and opens ready_wait s after the previous kill
@@ -741,6 +744,7 @@ impl Default for Params {
             rr_quiet: 6.0,
             rr_max_s: 45.0,
             rr_zone1: 0.0,
+            rr_cover_first: 0.0,
             rest_after_k: 0.0,
             ready_once: 0.0,
             ready_wait: 30.0,

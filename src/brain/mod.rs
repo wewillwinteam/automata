@@ -142,6 +142,9 @@ pub struct Brain {
     pub(crate) duck: Option<(V3, f64)>,
     /// roof retreat episode: start time (< 0 when none)
     pub(crate) rr_t0: f64,
+    /// roof retreat, cover first: the hidden spot at the building's foot, and whether climbing
+    pub(crate) rr_base: Option<V3>,
+    pub(crate) rr_climb: bool,
     pub(crate) kills: u32,
     pub(crate) pk: laser::Peek,
     pub(crate) lz_tid: i64,
@@ -233,6 +236,8 @@ impl Brain {
             edge_away: None,
             duck: None,
             rr_t0: -1.0,
+            rr_base: None,
+            rr_climb: false,
             kills: 0,
             pk: laser::Peek::new(),
             lz_tid: -1,

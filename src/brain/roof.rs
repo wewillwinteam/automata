@@ -250,12 +250,16 @@ impl Brain {
                 }
                 self.rr_t0 = t;
                 self.roof_sel = None;
+                self.rr_base = None;
+                self.rr_climb = false;
                 crate::runtime::log(&format!("RR start t={:.1} seen={} hp={:.2}", t, seen, hpf));
             } else {
                 let done = !ok_mode || zi.urgent || t - self.rr_t0 > p.rr_max_s || (hpf >= p.rr_hp && t - last_seen > p.rr_quiet);
                 if done {
                     crate::runtime::log(&format!("RR end t={:.1} after {:.1}s hp={:.2} on_roof={}", t, t - self.rr_t0, hpf, self.roof_on.is_some()));
                     self.rr_t0 = -1.0;
+                    self.rr_base = None;
+                    self.rr_climb = false;
                     self.roof_sel = None;
                     self.roof_on = None;
                     self.roof_step = None;
@@ -293,6 +297,63 @@ impl Brain {
         self.roof_on = if on { Some(ri) } else { None };
         if on && self.roof_first_t < 0.0 {
             self.roof_first_t = t;
+        }
+
+        if p.roof_mode <= 0.0 && p.rr_cover_first > 0.0 && self.rr_t0 >= 0.0 && !on && !self.rr_climb {
+            // cover first: reach a spot at the building's foot hidden from every attacker, on the
+            // far side from them; climb only from there, while still hidden
+            let eyes: Vec<V3> = self
+                .mem
+                .tracks
+                .iter()
+                .filter(|tr| tr.kind == ActorKind::Mech && t - tr.last_seen < 3.0)
+                .map(|tr| up(tr.pos_at(t), self.cfg.mech.eye_height))
+                .collect();
+            let h = me.stats.height.max(1.0);
+            let hidden = |q: V3| eyes.iter().all(|e| !world.sight(*e, up(q, h * 0.5)) && !world.sight(*e, up(q, h * 0.92)));
+            let (cx, cy) = if eyes.is_empty() { (pos[0], pos[1]) } else {
+                let k = eyes.len() as f64;
+                (eyes.iter().map(|e| e[0]).sum::<f64>() / k, eyes.iter().map(|e| e[1]).sum::<f64>() / k)
+            };
+            let keep = r.keep;
+            let need_new = match self.rr_base { Some(b) => !hidden(b), None => true };
+            if need_new {
+                let mut best: Option<(f64, V3)> = None;
+                for &rr in &[r.setback + 4.0, r.setback + 9.0, r.setback + 15.0] {
+                    for k in 0..16 {
+                        let a = k as f64 * std::f64::consts::PI / 8.0;
+                        let (x, y) = (keep[0] + rr * a.cos(), keep[1] + rr * a.sin());
+                        let q0 = [x, y, fin(world.floor_below(x, y, pos[2] + 3.0), pos[2])];
+                        let Some(q) = nav.snap(q0) else { continue };
+                        if dist(q, q0) > 4.0 || (q[2] - pos[2]).abs() > 4.0 || !hidden(q) {
+                            continue;
+                        }
+                        // shorter walk, and on the far side of the building from the attackers
+                        let away = unit2(q[0] - keep[0], q[1] - keep[1]);
+                        let from = unit2(keep[0] - cx, keep[1] - cy);
+                        let s = dist(q, pos) - 20.0 * (away[0] * from[0] + away[1] * from[1]);
+                        if best.map_or(true, |b| s < b.0) {
+                            best = Some((s, q));
+                        }
+                    }
+                }
+                self.rr_base = best.map(|b| b.1);
+            }
+            let Some(base) = self.rr_base else {
+                // no hidden way up here: give the episode up, retreat as usual
+                crate::runtime::log(&format!("RR nobase t={:.1}", t));
+                self.rr_t0 = -1.0;
+                self.roof_sel = None;
+                return;
+            };
+            if dist2(base, pos) > 3.0 || !hidden(pos) {
+                self.mode = Mode::Retreat;
+                self.goal = Goal::Nav { pos: base, arrive: 2.0 };
+                self.goal_id = -1;
+                return;
+            }
+            crate::runtime::log(&format!("RR climb t={:.1} from cover", t));
+            self.rr_climb = true;
         }
 
         let center = up(pos, me.stats.height * 0.5);

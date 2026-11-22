@@ -21,9 +21,15 @@ impl WaveState {
 impl Brain {
     pub(crate) fn wave_count(&mut self, obs: &Obs) {
         for ev in &obs.events {
-            if let Event::Kill(_) = ev {
+            if let Event::Kill(k) = ev {
                 self.wave.kills += 1;
                 self.wave.last_kill_t = obs.t;
+                if self.p.pace_on > 0.0 {
+                    // hunters head for where we were last seen: remember where this fight was
+                    let at = self.mem.tracks.iter().find(|tr| tr.id == k.target).map(|tr| tr.pos_at(obs.t)).unwrap_or(obs.me.pos);
+                    self.pace_kill = Some((obs.t, at));
+                    self.pace_spot = None;
+                }
             }
         }
     }

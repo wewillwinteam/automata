@@ -229,6 +229,7 @@ impl Brain {
         let gear_drop = self.gear_drop_ok(obs, tgt.as_ref());
         let hunt_near = if self.gear_on() { self.gear_near_real(obs) } else { near_mech };
         let rest = !want_retreat && !held && self.want_rest(obs, &zi, n_att, near_mech, hpf);
+        let pace = !want_retreat && !held && !zi.urgent && self.pace_active(obs, n_att, hpf);
         if want_retreat || held {
             self.econ.resting = false;
         }
@@ -271,6 +272,11 @@ impl Brain {
         } else if rest {
             mode = Mode::Retreat;
             goal = self.cover_goal(obs, world, nav, &zi);
+        } else if pace {
+            // after a kill: away from where the fight was, out of sight, heal before the next one
+            mode = Mode::Retreat;
+            goal = self.pace_goal(obs, world, nav, &zi);
+            self.econ.resting = true;
         } else if let Some(l) = loot.as_ref().filter(|l| l.quick) {
             mode = Mode::Loot;
             goal = Goal::Nav { pos: l.pos, arrive: 1.2 };
@@ -529,6 +535,74 @@ impl Brain {
             offer(1e6, q, &mut best);
         }
         best.map(|b| b.1).filter(|q| self.in_play(obs, zi, *q, dist(*q, me)))
+    }
+
+    /// Pacing after a kill (practice): no one has hurt us for 3 s, HP below pace_hp, and the
+    /// kill was less than pace_max_s ago. Ends at pace_hp, on timeout, or when attacked.
+    fn pace_active(&mut self, obs: &Obs, n_att: usize, hpf: f64) -> bool {
+        let p = &self.p;
+        let t = obs.t;
+        let Some((tk, _)) = self.pace_kill else { return false };
+        if p.pace_on <= 0.0 || !self.squad_mode() || self.ffa.on || t - tk > p.pace_max_s || hpf >= p.pace_hp {
+            self.pace_kill = None;
+            self.pace_spot = None;
+            return false;
+        }
+        n_att == 0 && t - self.mem.last_damage_t > 3.0
+    }
+
+    /// The hideout for pacing: 60+ m from the kill, hidden from every mech seen in the last
+    /// 25 s, preferring short walks and spots far from known mechs.
+    fn pace_goal(&mut self, obs: &Obs, world: &World, nav: &Nav, zi: &ZoneInfo) -> Goal {
+        let t = obs.t;
+        let pos = obs.me.pos;
+        let Some((_, kp)) = self.pace_kill else { return Goal::None };
+        let h = obs.me.stats.height.max(1.0);
+        let known: Vec<V3> = self
+            .mem
+            .tracks
+            .iter()
+            .filter(|a| a.kind == ActorKind::Mech && t - a.last_seen < 25.0)
+            .map(|a| up(a.pos_at(t), self.cfg.mech.eye_height))
+            .collect();
+        let hidden = |q: V3| known.iter().all(|e| !world.sight(*e, up(q, h * 0.5)) && !world.sight(*e, up(q, h * 0.92)));
+        if let Some(q) = self.pace_spot {
+            if self.in_play(obs, zi, q, dist(q, pos)) && hidden(q) {
+                return Goal::Nav { pos: q, arrive: 3.0 };
+            }
+        }
+        let z = &obs.zone;
+        let mut best: Option<(f64, V3)> = None;
+        'outer: for &r in &[45.0, 70.0, 95.0] {
+            for k in 0..12 {
+                if self.spent_ms() > 10.0 {
+                    break 'outer;
+                }
+                let a = k as f64 * std::f64::consts::PI / 6.0 + r * 0.03;
+                let (x, y) = (pos[0] + r * a.cos(), pos[1] + r * a.sin());
+                let q0 = [x, y, fin(world.floor_below(x, y, pos[2] + 3.0), pos[2])];
+                let Some(q) = nav.snap(q0) else { continue };
+                if dist(q, q0) > 8.0 || !q.iter().all(|v| v.is_finite()) || dist2(q, kp) < 60.0 {
+                    continue;
+                }
+                if !self.in_play(obs, zi, q, dist(q, pos)) || !hidden(q) {
+                    continue;
+                }
+                let near = known.iter().map(|e| dist2(*e, q)).fold(150.0, f64::min);
+                let out_next = (dist2v(q, z.next_center) - z.next_radius + 10.0).max(0.0);
+                let s = dist(q, pos) - 0.5 * near + 0.6 * out_next;
+                if best.map_or(true, |b| s < b.0) {
+                    best = Some((s, q));
+                }
+            }
+        }
+        match best {
+            Some((_, q)) => {
+                self.pace_spot = Some(q);
+                Goal::Nav { pos: q, arrive: 3.0 }
+            }
+            None => self.cover_goal(obs, world, nav, zi),
+        }
     }
 
     /// Back to the wall (practice): with 2+ mechs hitting us in the last 5 s, the nearby spot

@@ -254,6 +254,11 @@ pub struct Params {
     /// near the boundary, retreat with 2+ attackers only below this HP (instead of
     /// retreat_multi_hp); < 0 = unchanged
     pub edge_multi_hp: f64,
+    /// practice: duck into full cover (within duck_r m) while the gun is empty or reloading
+    /// and the laser is not ready; with duck_ammo > 0, also once ammo is that low; 0 = off
+    pub duck_on: f64,
+    pub duck_ammo: f64,
+    pub duck_r: f64,
     /// after this many kills (squad play only), rest to full between fights
     pub rest_after_k: f64,
     /// the kill gate applies to the gated kill only, and opens ready_wait s after the previous kill
@@ -693,6 +698,9 @@ impl Default for Params {
             edge_hi: 0.0,
             edge_w: 2.0,
             edge_multi_hp: -1.0,
+            duck_on: 0.0,
+            duck_ammo: 0.0,
+            duck_r: 10.0,
             rest_after_k: 0.0,
             ready_once: 0.0,
             ready_wait: 30.0,

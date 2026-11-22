@@ -322,7 +322,10 @@ impl Brain {
             let pref = self.gear_range(obs, tr, base);
             self.stand_off = far && pref >= base;
             let hold = p.hold_hunter > 0.0 && !los && self.holds_for(obs, tr);
-            let g0 = if let Some(q) = self.wall_goal(obs, world, nav, tr, pref).filter(|_| los) {
+            let g0 = if let Some(q) = self.duck_goal(obs, world, nav) {
+                // gun empty and no laser ready: duck into full cover, peek out again once reloaded
+                Goal::Nav { pos: q, arrive: 1.0 }
+            } else if let Some(q) = self.wall_goal(obs, world, nav, tr, pref).filter(|_| los) {
                 // swarmed: fight from the spot that shows the least of us, back to a wall
                 Goal::Nav { pos: q, arrive: 1.5 }
             } else if los {

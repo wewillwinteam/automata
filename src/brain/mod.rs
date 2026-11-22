@@ -30,6 +30,7 @@ mod tests;
 mod laser_tests;
 mod wave;
 mod edge;
+mod duck;
 
 pub use params::Params;
 
@@ -137,6 +138,8 @@ pub struct Brain {
     pub(crate) edge_fight: Option<(f64, f64)>,
     pub(crate) edge_wob: (f64, f64),
     pub(crate) edge_away: Option<V2>,
+    /// peek and duck: the cover spot and when it was chosen
+    pub(crate) duck: Option<(V3, f64)>,
     pub(crate) kills: u32,
     pub(crate) pk: laser::Peek,
     pub(crate) lz_tid: i64,
@@ -226,6 +229,7 @@ impl Brain {
             edge_fight: None,
             edge_wob: (0.0, -1e9),
             edge_away: None,
+            duck: None,
             kills: 0,
             pk: laser::Peek::new(),
             lz_tid: -1,
@@ -297,6 +301,14 @@ impl Brain {
                     if w.kind == crate::proto::WeaponKind::Laser && w.charge <= 0.0 {
                         fc.fire[i] = false;
                     }
+                }
+            }
+        }
+        if self.duck.is_some() {
+            // in cover: reload now (it may not be empty yet when ducking early)
+            if let Some(g) = obs.me.weapons.iter().flatten().find(|w| w.kind == crate::proto::WeaponKind::Gun) {
+                if g.reload <= 0.0 && g.ammo < g.stats.mag {
+                    fc.reload = true;
                 }
             }
         }

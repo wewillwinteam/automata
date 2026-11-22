@@ -270,6 +270,9 @@ pub struct Params {
     /// laser early release: count cube damage, x1.5 into the target's back and mortar
     /// cook-off when judging whether the current charge kills; 0 = off
     pub lz_lethal_bonus: f64,
+    /// cover search: when no spot hides us from every threat, take the spot seen by the
+    /// fewest of them (instead of running straight away); 0 = off
+    pub cover_partial: f64,
     /// after this many kills (squad play only), rest to full between fights
     pub rest_after_k: f64,
     /// the kill gate applies to the gated kill only, and opens ready_wait s after the previous kill
@@ -716,6 +719,7 @@ impl Default for Params {
             duck_trees: 0.0,
             cover_trees: 0.0,
             lz_lethal_bonus: 0.0,
+            cover_partial: 0.0,
             rest_after_k: 0.0,
             ready_once: 0.0,
             ready_wait: 30.0,

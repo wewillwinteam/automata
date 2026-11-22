@@ -977,6 +977,34 @@ impl Brain {
                 consider(q, 0.0, &mut best);
             }
         }
+        if best.is_none() && p.cover_partial > 0.0 && eyes.len() >= 2 {
+            // no spot hides us from everyone: take the one seen by the fewest threats
+            let n_eyes = eyes.len();
+            let mut part: Option<(f64, V3)> = None;
+            'outer: for &r in &[12.0, 24.0, 40.0] {
+                for k in 0..12 {
+                    if self.spent_ms() > 12.0 {
+                        break 'outer;
+                    }
+                    let a = k as f64 * std::f64::consts::PI / 6.0 + r * 0.1;
+                    let (x, y) = (pos[0] + r * a.cos(), pos[1] + r * a.sin());
+                    let q0 = [x, y, fin(world.floor_below(x, y, pos[2] + 3.0), pos[2])];
+                    let Some(q) = nav.snap(q0) else { continue };
+                    if dist(q, q0) > 8.0 || !q.iter().all(|v| v.is_finite()) || dist2v(q, zi.cur_c) > zi.cur_r - 12.0 {
+                        continue;
+                    }
+                    let seen = eyes.iter().filter(|e| world.sight(**e, up(q, h * 0.5)) || world.sight(**e, up(q, h * 0.92))).count();
+                    if seen >= n_eyes {
+                        continue;
+                    }
+                    let sc = 40.0 * seen as f64 + dist(q, pos);
+                    if part.map_or(true, |b| sc < b.0) {
+                        part = Some((sc, q));
+                    }
+                }
+            }
+            best = part;
+        }
         let q = match best {
             Some((_, q)) => q,
             None => {
